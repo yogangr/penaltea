@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Adu Penalti Pro — Monokrom Multiplayer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Chakra Petch & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top, #1f1f1f 0%, #0d0d0d 58%, #000000 100%);
+            color: #f5f5f5;
+            min-height: 100vh;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .font-sport {
+            font-family: 'Chakra Petch', sans-serif;
+        }
+
+        /* Enforce strict black & white rendering even for system emoji glyphs */
+        .mono-icon {
+            display: inline-block;
+            filter: grayscale(100%) contrast(1.25);
+        }
+
+        .glass-panel {
+            background: rgba(14, 14, 14, 0.88);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 14px 36px rgba(0, 0, 0, 0.72);
+        }
+
+        /* High-Contrast Monochrome Primary Button (Crisp White) */
+        .btn-primary {
+            background: linear-gradient(135deg, #ffffff 0%, #d4d4d4 100%);
+            color: #0a0a0a;
+            box-shadow: 0 4px 18px rgba(255, 255, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+            transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, #ffffff 0%, #e5e5e5 100%);
+            box-shadow: 0 8px 24px rgba(255, 255, 255, 0.34);
+        }
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        .btn-primary:disabled {
+            opacity: 0.38;
+            cursor: not-allowed;
+        }
+
+        /* Monochrome Secondary Button (Dark Charcoal with White Edge) */
+        .btn-secondary {
+            background: linear-gradient(135deg, #2e2e2e 0%, #141414 100%);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.38);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+            transition: all 0.2s ease;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, #3d3d3d 0%, #1c1c1c 100%);
+            border-color: rgba(255, 255, 255, 0.75);
+            box-shadow: 0 8px 20px rgba(255, 255, 255, 0.14);
+        }
+        .btn-secondary:disabled {
+            opacity: 0.38;
+            cursor: not-allowed;
+        }
+
+        /* Interactive Stadium Canvas Wrapper */
+        #stadium-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            max-height: 560px;
+            min-height: 250px;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+            background: #050505;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #stadium-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        /* Monochrome Scoreboard Dots */
+        .score-dot {
+            width: 15px;
+            height: 15px;
+            border-radius: 9999px;
+            border: 2px solid rgba(255, 255, 255, 0.28);
+            background: #141414;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1;
+            transition: all 0.28s ease;
+        }
+        .score-dot.goal {
+            background: #ffffff;
+            border-color: #ffffff;
+            color: #000000;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+        .score-dot.miss {
+            background: #1c1c1c;
+            border-color: #737373;
+            color: #d4d4d4;
+        }
+        .score-dot.miss::after {
+            content: "×";
+            font-size: 11px;
+            line-height: 1;
+        }
+        .score-dot.current {
+            border-color: #ffffff;
+            animation: pulseDot 1.25s infinite;
+        }
+
+        @keyframes pulseDot {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+            50% { transform: scale(1.2); box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+        }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.75) translateY(10px); }
+            65% { opacity: 1; transform: scale(1.06) translateY(-2px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-pop {
+            animation: popIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        @keyframes glowPulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(255, 255, 255, 0.45); }
+            50% { box-shadow: 0 0 22px rgba(255, 255, 255, 0.9); }
+        }
+        .sudden-death-badge {
+            animation: glowPulse 1.4s infinite;
+        }
+
+        /* Monochrome Kit Swatches */
+        .kit-swatch {
+            transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+        }
+        .kit-swatch.active {
+            transform: scale(1.16);
+            border-color: #ffffff;
+            box-shadow: 0 0 0 2px #000000, 0 0 0 4px #ffffff;
+        }
+        .swatch-blackout {
+            background: linear-gradient(135deg, #262626 0%, #000000 100%);
+        }
+        .swatch-white {
+            background: linear-gradient(135deg, #ffffff 0%, #d4d4d4 100%);
+        }
+        .swatch-striped {
+            background: repeating-linear-gradient(90deg, #ffffff 0px, #ffffff 4px, #0a0a0a 4px, #0a0a0a 8px);
+        }
+        .swatch-silver {
+            background: linear-gradient(135deg, #a3a3a3 0%, #525252 100%);
+        }
+
+        #toast-container {
+            position: fixed;
+            bottom: 1.25rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen selection:bg-white/25 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="w-full max-w-5xl mx-auto px-3 sm:px-6 pt-3 pb-2 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white text-black border border-neutral-300 flex items-center justify-center shadow-lg shadow-white/15 text-lg sm:text-xl">
+                <span class="mono-icon">⚽</span>
+            </div>
+            <div>
+                <h1 class="font-sport text-lg sm:text-2xl font-bold tracking-wide leading-none text-white">
+                    ADU PENALTI <span class="text-neutral-400">PRO</span>
+                </h1>
+                <p class="text-[11px] sm:text-xs text-neutral-400 leading-tight mt-0.5">Edisi Monokrom • Full-Body Physics</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button id="btn-back-lobby" class="hidden px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-xs sm:text-sm font-semibold text-neutral-200 transition flex items-center gap-1.5">
+                <span class="mono-icon">🏠</span><span class="hidden sm:inline">Menu Utama</span>
+            </button>
+            <button id="btn-audio-toggle" class="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-xs sm:text-sm font-semibold text-neutral-200 transition flex items-center gap-1.5" title="Suara Stadion">
+                <span id="audio-icon" class="mono-icon">🔊</span>
+                <span id="audio-label" class="hidden sm:inline">Suara Aktif</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 w-full max-w-5xl mx-auto px-3 sm:px-6 pb-6 flex flex-col justify-center">
+
+        <!-- ==================== LOBBY SCREEN ==================== -->
+        <section id="screen-lobby" class="w-full max-w-3xl mx-auto my-auto py-2 space-y-5">
+            <div class="glass-panel rounded-3xl p-5 sm:p-8 text-center relative overflow-hidden">
+                <div class="absolute -top-24 -left-24 w-56 h-56 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -bottom-24 -right-24 w-56 h-56 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/25 text-neutral-200 text-xs font-semibold mb-3 tracking-wide">
+                    <span class="mono-icon">🏟️</span> STADION NOIR MONOKROM • FULL-BODY BLOCK
+                </span>
+                <h2 class="font-sport text-2xl sm:text-4xl font-bold text-white tracking-tight">
+                    Tentukan Juara dari Titik Putih!
+                </h2>
+                <p class="text-neutral-300 text-sm sm:text-base mt-2 max-w-xl mx-auto">
+                    Bidik <strong class="text-white">semua sudut gawang secara bebas</strong> langsung di layar! Seluruh tubuh kiper—<strong class="text-white">tangan, badan, hingga kaki</strong>—berfungsi sebagai blok nyata yang dapat menghalau bola.
+                </p>
+
+                <!-- Mode Tabs -->
+                <div class="mt-6 grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-black/80 border border-neutral-800 max-w-md mx-auto">
+                    <button id="tab-local" type="button" class="py-2.5 px-3 rounded-xl font-semibold text-sm transition bg-white text-black shadow-md">
+                        <span class="mono-icon">📱</span> Lokal (1 Perangkat)
+                    </button>
+                    <button id="tab-online" type="button" class="py-2.5 px-3 rounded-xl font-semibold text-sm transition text-neutral-400 hover:text-white">
+                        <span class="mono-icon">🌐</span> Online Multiplayer
+                    </button>
+                </div>
+
+                <!-- LOCAL MODE PANEL -->
+                <div id="panel-local" class="mt-6 text-left max-w-md mx-auto space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider">Nama Pemain 1 (#10)</label>
+                            <input id="input-local-p1" type="text" maxlength="14" value="Pemain 1" placeholder="Nama Pemain 1"
+                                class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-neutral-700 focus:border-white focus:outline-none text-white font-medium text-sm">
+                            <div class="flex items-center gap-2 mt-2" data-kit-group="local-p1">
+                                <span class="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Kostum:</span>
+                                <button type="button" data-kit="blackout" title="Hitam Pekat (Blackout)" class="kit-swatch active w-6 h-6 rounded-full border-2 border-neutral-500 swatch-blackout"></button>
+                                <button type="button" data-kit="white" title="Putih Klasik (Classic White)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-white"></button>
+                                <button type="button" data-kit="striped" title="Garis Hitam-Putih (Striped Mono)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-striped"></button>
+                                <button type="button" data-kit="silver" title="Abu-Abu Perak (Silver Slate)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-silver"></button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider">Nama Pemain 2 (#9)</label>
+                            <input id="input-local-p2" type="text" maxlength="14" value="Pemain 2" placeholder="Nama Pemain 2"
+                                class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-neutral-700 focus:border-white focus:outline-none text-white font-medium text-sm">
+                            <div class="flex items-center gap-2 mt-2" data-kit-group="local-p2">
+                                <span class="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Kostum:</span>
+                                <button type="button" data-kit="blackout" title="Hitam Pekat (Blackout)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-blackout"></button>
+                                <button type="button" data-kit="white" title="Putih Klasik (Classic White)" class="kit-swatch active w-6 h-6 rounded-full border-2 border-neutral-500 swatch-white"></button>
+                                <button type="button" data-kit="striped" title="Garis Hitam-Putih (Striped Mono)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-striped"></button>
+                                <button type="button" data-kit="silver" title="Abu-Abu Perak (Silver Slate)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-silver"></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-2xl bg-neutral-950/90 border border-neutral-800 p-3.5 text-xs text-neutral-300 space-y-1">
+                        <p class="font-semibold text-white">Cara Main Mode Lokal (Pass &amp; Play):</p>
+                        <p>1. <strong class="text-white">Penendang</strong> arahkan &amp; <strong class="text-white">tahan langsung di gawang</strong> untuk mengisi power, lalu lepaskan.</p>
+                        <p>2. Layar privasi muncul — serahkan perangkat ke Kiper.</p>
+                        <p>3. <strong class="text-white">Kiper</strong> arahkan siluet tubuh &amp; <strong class="text-white">ketuk 1x di gawang</strong> untuk melompat dan memblok bola!</p>
+                    </div>
+
+                    <button id="btn-start-local" type="button" class="w-full py-3.5 rounded-2xl btn-primary font-sport font-bold text-lg tracking-wide flex items-center justify-center gap-2">
+                        <span class="mono-icon">⚽</span> MULAI PERTANDINGAN LOKAL
+                    </button>
+                </div>
+
+                <!-- ONLINE MODE PANEL -->
+                <div id="panel-online" class="hidden mt-6 text-left max-w-md mx-auto space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider">Nama Anda di Stadion</label>
+                        <input id="input-online-name" type="text" maxlength="14" value="Striker" placeholder="Masukkan nama Anda"
+                            class="w-full px-3.5 py-2.5 rounded-xl bg-black border border-neutral-700 focus:border-white focus:outline-none text-white font-medium text-sm">
+                        <div class="flex items-center gap-2.5 mt-2.5" data-kit-group="online-self">
+                            <span class="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">Kostum Tim:</span>
+                            <button type="button" data-kit="blackout" title="Hitam Pekat (Blackout)" class="kit-swatch active w-6 h-6 rounded-full border-2 border-neutral-500 swatch-blackout"></button>
+                            <button type="button" data-kit="white" title="Putih Klasik (Classic White)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-white"></button>
+                            <button type="button" data-kit="striped" title="Garis Hitam-Putih (Striped Mono)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-striped"></button>
+                            <button type="button" data-kit="silver" title="Abu-Abu Perak (Silver Slate)" class="kit-swatch w-6 h-6 rounded-full border-2 border-neutral-500 swatch-silver"></button>
+                        </div>
+                    </div>
+
+                    <div id="online-status-box" class="rounded-xl bg-neutral-950 border border-neutral-800 px-3.5 py-2.5 text-xs flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span id="online-status-dot" class="w-2.5 h-2.5 rounded-full bg-neutral-400 animate-pulse"></span>
+                            <span id="online-status-text" class="text-neutral-300">Menghubungkan ke server multiplayer...</span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button id="btn-create-room" type="button" disabled class="py-3.5 px-4 rounded-2xl btn-primary font-sport font-bold text-base tracking-wide flex items-center justify-center gap-2">
+                            <span>＋</span> BUAT ROOM
+                        </button>
+                        <div class="flex gap-2">
+                            <input id="input-room-code" type="text" maxlength="5" placeholder="KODE 5 HURUF"
+                                class="w-full px-3 py-2.5 rounded-xl bg-black border border-neutral-700 focus:border-white focus:outline-none text-white font-sport font-bold text-center tracking-widest uppercase text-sm">
+                            <button id="btn-join-room" type="button" disabled class="px-4 py-2.5 rounded-xl btn-secondary font-sport font-bold text-sm whitespace-nowrap">
+                                GABUNG
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="text-[11px] text-neutral-400 text-center">
+                        Kedua pemain memilih secara rahasia bersamaan; animasi tendangan berjalan serentak setelah keduanya mengunci pilihan.
+                    </p>
+                    <p id="user-id-display" class="text-[10px] text-neutral-500 text-center font-mono break-all hidden"></p>
+                </div>
+            </div>
+
+            <!-- Mechanics Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="glass-panel rounded-2xl p-4">
+                    <div class="text-lg mb-1"><span class="mono-icon">🎯</span> <span class="font-bold text-sm text-white">Bidik Bebas + Tahan Power</span></div>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Tahan di titik mana saja pada gawang: <strong class="text-neutral-200">Pelan (0–35%)</strong> super akurat, <strong class="text-neutral-200">Sedang (36–70%)</strong> seimbang, <strong class="text-white">Kencang (71–100%)</strong> super cepat dengan sedikit sebaran.</p>
+                </div>
+                <div class="glass-panel rounded-2xl p-4">
+                    <div class="text-lg mb-1"><span class="mono-icon">🛡️</span> <span class="font-bold text-sm text-white">Blok Seluruh Tubuh Kiper</span></div>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Bola yang mengenai <strong class="text-neutral-200">sarung tangan, lengan, kepala, dada, paha, betis, maupun sepatu</strong> kiper saat melompat akan langsung terhalau dan memantul!</p>
+                </div>
+                <div class="glass-panel rounded-2xl p-4">
+                    <div class="text-lg mb-1"><span class="mono-icon">👤</span> <span class="font-bold text-sm text-white">Siluet Prediksi Lompatan</span></div>
+                    <p class="text-xs text-neutral-400 leading-relaxed">Kiper melihat pratinjau siluet posisi penuh tubuh &amp; kaki sebelum mengetuk, sehingga bisa menutup ruang tembak secara strategis.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== ONLINE WAITING ROOM ==================== -->
+        <section id="screen-waiting" class="hidden w-full max-w-md mx-auto my-auto">
+            <div class="glass-panel rounded-3xl p-6 sm:p-8 text-center space-y-5">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-white/10 border border-white/25 flex items-center justify-center text-3xl animate-bounce">
+                    <span class="mono-icon">🏟️</span>
+                </div>
+                <div>
+                    <h2 class="font-sport text-2xl font-bold text-white">Menunggu Lawan...</h2>
+                    <p class="text-sm text-neutral-400 mt-1">Bagikan kode room ini kepada teman Anda untuk bergabung.</p>
+                </div>
+
+                <div class="bg-black border-2 border-dashed border-white/50 rounded-2xl p-4">
+                    <div class="text-xs text-neutral-400 uppercase tracking-widest mb-1">Kode Room</div>
+                    <div id="waiting-room-code" class="font-sport text-4xl font-bold tracking-[0.25em] text-white select-all">-----</div>
+                </div>
+
+                <div class="flex gap-2.5">
+                    <button id="btn-copy-code" type="button" class="flex-1 py-3 rounded-xl btn-primary font-semibold text-sm flex items-center justify-center gap-2">
+                        <span class="mono-icon">📋</span> Salin Kode
+                    </button>
+                    <button id="btn-cancel-waiting" type="button" class="px-4 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 font-semibold text-sm">
+                        Batal
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== GAMEPLAY SCREEN ==================== -->
+        <section id="screen-game" class="hidden w-full space-y-3">
+
+            <!-- SCOREBOARD -->
+            <div class="glass-panel rounded-2xl p-3 sm:p-4">
+                <div class="flex items-center justify-between gap-2">
+                    <!-- Player 1 -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span id="sb-p1-name" class="font-bold text-sm sm:text-base text-white truncate">Pemain 1</span>
+                            <span id="sb-p1-role" class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-white text-black border border-white">PENENDANG</span>
+                        </div>
+                        <div id="sb-p1-dots" class="flex items-center gap-1.5 mt-2 flex-wrap"></div>
+                    </div>
+
+                    <!-- Center Score & Round -->
+                    <div class="text-center px-2 sm:px-5 shrink-0">
+                        <div id="sb-round-badge" class="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-neutral-900 text-neutral-200 border border-neutral-600 inline-block mb-1">
+                            RONDE 1 / 5
+                        </div>
+                        <div class="font-sport text-2xl sm:text-4xl font-bold tracking-wider text-white leading-none">
+                            <span id="sb-p1-score" class="text-white">0</span>
+                            <span class="text-neutral-500 mx-1">-</span>
+                            <span id="sb-p2-score" class="text-neutral-300">0</span>
+                        </div>
+                        <div id="sb-room-tag" class="hidden text-[10px] text-neutral-400 font-mono mt-1">ROOM: -----</div>
+                    </div>
+
+                    <!-- Player 2 -->
+                    <div class="flex-1 min-w-0 text-right">
+                        <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                            <span id="sb-p2-role" class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-200 border border-neutral-500">KIPER</span>
+                            <span id="sb-p2-name" class="font-bold text-sm sm:text-base text-white truncate">Pemain 2</span>
+                        </div>
+                        <div id="sb-p2-dots" class="flex items-center justify-end gap-1.5 mt-2 flex-wrap"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COMMENTATOR BAR -->
+            <div class="glass-panel rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 border-l-4 border-l-white">
+                <span class="text-lg shrink-0 mono-icon">🎙️</span>
+                <p id="commentator-text" class="text-xs sm:text-sm font-medium text-neutral-200 leading-snug">
+                    Selamat datang di stadion! Penendang bersiap mengambil ancang-ancang...
+                </p>
+            </div>
+
+            <!-- FULL-WIDTH STADIUM CANVAS VIEWPORT -->
+            <div id="stadium-wrapper">
+                <canvas id="stadium-canvas"></canvas>
+
+                <!-- Floating Result Banner -->
+                <div id="result-banner" class="hidden absolute inset-x-0 top-4 sm:top-6 flex justify-center pointer-events-none px-4 z-20">
+                    <div id="result-banner-inner" class="animate-pop px-6 py-2.5 rounded-2xl font-sport font-bold text-xl sm:text-4xl tracking-wider shadow-2xl border-2 text-center">
+                        GOOOOL!
+                    </div>
+                </div>
+
+                <!-- Privacy Handoff Overlay (Local Pass & Play) -->
+                <div id="overlay-privacy" class="hidden absolute inset-0 bg-black/95 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center">
+                    <div class="w-16 h-16 rounded-2xl bg-white/10 border border-white/30 flex items-center justify-center text-3xl mb-3">
+                        <span class="mono-icon">🙈</span>
+                    </div>
+                    <h3 id="privacy-title" class="font-sport text-xl sm:text-3xl font-bold text-white">Serahkan Perangkat ke Kiper!</h3>
+                    <p id="privacy-desc" class="text-neutral-300 text-xs sm:text-sm mt-1.5 max-w-sm">
+                        Penendang sudah mengunci titik &amp; kekuatan tendangan secara rahasia. Pastikan penendang tidak mengintip!
+                    </p>
+                    <button id="btn-privacy-ready" type="button" class="mt-5 px-7 py-3 rounded-2xl btn-primary font-sport font-bold text-base tracking-wide">
+                        <span class="mono-icon">🧤</span> SAYA SIAP (KIPER)
+                    </button>
+                </div>
+
+                <!-- Online Waiting Opponent Lock Pill -->
+                <div id="overlay-online-wait" class="hidden absolute inset-x-0 bottom-4 flex justify-center pointer-events-none z-20 px-3">
+                    <div class="px-4 py-2 rounded-full bg-black/90 border border-white/50 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-xl">
+                        <span class="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+                        <span>Pilihan terkunci! Menunggu lawan mengunci pilihan...</span>
+                    </div>
+                </div>
+
+                <!-- Match Over Overlay -->
+                <div id="overlay-gameover" class="hidden absolute inset-0 bg-black/92 backdrop-blur-md z-30 flex flex-col items-center justify-center p-5 text-center">
+                    <div class="text-4xl sm:text-5xl mb-2 mono-icon">🏆</div>
+                    <div class="text-xs uppercase tracking-widest text-neutral-400 font-bold">PERTANDINGAN SELESAI</div>
+                    <h3 id="gameover-winner" class="font-sport text-2xl sm:text-4xl font-bold text-white mt-1">PEMAIN 1 MENANG!</h3>
+                    <p id="gameover-score" class="text-neutral-300 text-sm sm:text-base mt-1 font-semibold">Skor Akhir: 4 - 2</p>
+
+                    <div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+                        <button id="btn-rematch" type="button" class="px-6 py-3 rounded-2xl btn-primary font-sport font-bold text-base tracking-wide flex items-center gap-2">
+                            <span class="mono-icon">🔄</span> MAIN LAGI (REMATCH)
+                        </button>
+                        <button id="btn-gameover-menu" type="button" class="px-5 py-3 rounded-2xl btn-secondary font-semibold text-sm">
+                            Kembali ke Menu
+                        </button>
+                    </div>
+                    <p id="rematch-status" class="hidden text-xs text-neutral-300 mt-3 animate-pulse">Menunggu lawan menyetujui Rematch...</p>
+                </div>
+            </div>
+
+            <!-- SLIM STATUS / INSTRUCTION BAR (Tanpa tombol arah/kekuatan di bawah) -->
+            <div class="glass-panel rounded-2xl px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span id="hud-role-icon" class="text-xl shrink-0 mono-icon">🎯</span>
+                    <div class="min-w-0">
+                        <h3 id="control-title" class="font-sport text-sm sm:text-base font-bold text-white leading-tight truncate">
+                            Giliran Penendang: Bidik &amp; Tahan di Gawang
+                        </h3>
+                        <p id="control-subtitle" class="text-[11px] sm:text-xs text-neutral-400 leading-snug">
+                            Arahkan ke titik mana saja pada gawang, tahan untuk mengisi power, lalu lepaskan.
+                        </p>
+                    </div>
+                </div>
+                <div class="text-[11px] sm:text-xs font-semibold px-3 py-1.5 rounded-xl bg-black border border-neutral-700 text-neutral-300 self-start sm:self-auto whitespace-nowrap shrink-0">
+                    Target: <span id="summary-zone" class="text-white">Arahkan ke Gawang</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Custom Confirm Modal (No browser alert/confirm) -->
+    <div id="modal-confirm" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel rounded-2xl max-w-sm w-full p-5 text-center space-y-4">
+            <h4 class="font-sport text-xl font-bold text-white">Keluar dari Pertandingan?</h4>
+            <p class="text-xs sm:text-sm text-neutral-300">Progres adu penalti saat ini akan dihentikan dan Anda akan kembali ke Menu Utama.</p>
+            <div class="flex gap-2.5">
+                <button id="btn-confirm-cancel" type="button" class="flex-1 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 font-semibold text-sm">Batal</button>
+                <button id="btn-confirm-leave" type="button" class="flex-1 py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-sm">Ya, Keluar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- ==================== GAME ENGINE & MULTIPLAYER MODULE ==================== -->
+    <script type="module" src="/js/app.js"></script>
+</body>
+</html>
