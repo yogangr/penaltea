@@ -5,19 +5,30 @@ const { Pool } = require('pg');
 
 const PORT = process.env.PORT || 3000;
 const ROOM_TTL_HOURS = 24;
-const POLL_MS = 600;
 
-const pool = process.env.DATABASE_URL
+function cleanDbUrl(url) {
+  if (!url) return url;
+  return url
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/([?&])channel_binding=[^&]*&?/, '$1')
+    .replace(/[?&]$/, '');
+}
+const DB_URL = cleanDbUrl(process.env.DATABASE_URL);
+
+const pool = DB_URL
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL) ? false : { rejectUnauthorized: false },
-      max: 5,
+      connectionString: DB_URL,
+      ssl: /localhost|127\.0\.0\.1/.test(DB_URL) ? false : { rejectUnauthorized: false },
+      max: process.env.VERCEL ? 1 : 5,
       idleTimeoutMillis: 10000
     })
   : null;
 
 const app = express();
-app.use(express.json({ limit: '32kb' }));
+// Di Vercel, body sudah di-parse lebih dulu oleh platform; jangan dibaca ulang.
+const jsonParser = express.json({ limit: '32kb' });
+app.use((req, res, next) => (req.body && typeof req.body === 'object' ? next() : jsonParser(req, res, next)));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------------------------------------------------------- helpers
@@ -58,70 +69,20 @@ function applyUpdate(obj, key, value) {
 const isMember = (data, uid) =>
   Boolean(uid) && ((data.p1 && data.p1.uid === uid) || (data.p2 && data.p2.uid === uid));
 
-// ---------------------------------------------------------------- SSE hub
-// Setiap room punya sekumpulan koneksi SSE. Satu timer polling versi di DB
-// sehingga perubahan dari instance server lain tetap terdeteksi.
-const subscribers = new Map(); // code -> Set<{res, version}>
-
-function sendEvent(res, event, payload) {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
-}
-
-async function broadcast(code, row) {
-  const subs = subscribers.get(code);
-  if (!subs) return;
-  for (const s of subs) {
-    if (s.version !== Number(row.version)) {
-      s.version = Number(row.version);
-      sendEvent(s.res, 'room', row.data);
-    }
-  }
-}
-
-setInterval(async () => {
-  if (!pool || subscribers.size === 0) return;
-  try {
-    const codes = [...subscribers.keys()];
-    const { rows } = await pool.query(
-      'SELECT code, data, version FROM penalty_rooms WHERE code = ANY($1)', [codes]
-    );
-    const found = new Set();
-    for (const row of rows) {
-      found.add(row.code);
-      await broadcast(row.code, row);
-    }
-    for (const code of codes) {
-      if (!found.has(code)) {
-        for (const s of subscribers.get(code) || []) sendEvent(s.res, 'closed', {});
-      }
-    }
-  } catch (err) {
-    console.error('Poll error:', err.message);
-  }
-}, POLL_MS);
-
-// Hapus room yang sudah lama tidak aktif.
-setInterval(async () => {
-  if (!pool) return;
-  try {
-    await pool.query(
-      `DELETE FROM penalty_rooms WHERE updated_at < now() - ($1 || ' hours')::interval`,
-      [String(ROOM_TTL_HOURS)]
-    );
-  } catch (err) {
-    console.error('Cleanup error:', err.message);
-  }
-}, 60 * 60 * 1000);
-
 // ---------------------------------------------------------------- routes
 app.get('/api/health', async (req, res) => {
-  if (!pool) return res.json({ ok: true, db: false });
+  res.set('Cache-Control', 'no-store');
+  if (!pool) return res.json({ ok: true, db: false, reason: 'DATABASE_URL belum diisi di environment server' });
   try {
     await pool.query('SELECT 1');
+    const t = await pool.query("SELECT to_regclass('public.penalty_rooms') AS t");
+    if (!t.rows[0].t) {
+      return res.json({ ok: true, db: false, reason: 'Tabel penalty_rooms belum dibuat (jalankan npm run db:migrate)' });
+    }
     res.json({ ok: true, db: true });
   } catch (err) {
     console.error('Health error:', err.message);
-    res.json({ ok: true, db: false });
+    res.json({ ok: true, db: false, reason: `Koneksi database gagal: ${err.code || err.message}` });
   }
 });
 
@@ -153,6 +114,7 @@ app.post('/api/rooms', requireDb, async (req, res) => {
        ON CONFLICT (code) DO NOTHING RETURNING code`,
       [code, data]
     );
+    cleanupOldRooms();
     if (r.rowCount === 0) return res.status(409).json({ error: 'Kode room sudah dipakai' });
     res.status(201).json({ ok: true, code });
   } catch (err) {
@@ -161,12 +123,17 @@ app.post('/api/rooms', requireDb, async (req, res) => {
   }
 });
 
-// Ambil room
+// Ambil room. Dengan ?since=<version>, balas {changed:false} bila belum ada perubahan.
 app.get('/api/rooms/:code', requireDb, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT data FROM penalty_rooms WHERE code = $1', [normCode(req.params.code)]);
+    const { rows } = await pool.query('SELECT data, version FROM penalty_rooms WHERE code = $1', [normCode(req.params.code)]);
     if (!rows.length) return res.status(404).json({ error: 'Room tidak ditemukan' });
-    res.json({ data: rows[0].data });
+    const version = Number(rows[0].version);
+    res.set('Cache-Control', 'no-store');
+    if (req.query.since !== undefined && Number(req.query.since) === version) {
+      return res.json({ changed: false, version });
+    }
+    res.json({ changed: true, version, data: rows[0].data });
   } catch (err) {
     console.error('Get room error:', err.message);
     res.status(500).json({ error: 'Gagal mengambil room' });
@@ -195,7 +162,6 @@ app.post('/api/rooms/:code/join', requireDb, async (req, res) => {
         [code, data]
       );
       await client.query('COMMIT');
-      broadcast(code, up.rows[0]);
     } else {
       await client.query('COMMIT');
     }
@@ -237,7 +203,6 @@ app.patch('/api/rooms/:code', requireDb, async (req, res) => {
       [code, data]
     );
     await client.query('COMMIT');
-    broadcast(code, up.rows[0]);
     res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -249,43 +214,23 @@ app.patch('/api/rooms/:code', requireDb, async (req, res) => {
   }
 });
 
-// Real-time: Server-Sent Events
-app.get('/api/rooms/:code/events', requireDb, async (req, res) => {
-  const code = normCode(req.params.code);
+// Bersihkan room lama secara oportunistik (tanpa timer, cocok untuk serverless)
+async function cleanupOldRooms() {
   try {
-    const { rows } = await pool.query('SELECT data, version FROM penalty_rooms WHERE code = $1', [code]);
-    if (!rows.length) return res.status(404).json({ error: 'Room tidak ditemukan' });
-
-    res.set({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
-    res.flushHeaders();
-    res.write('retry: 1500\n\n');
-
-    const sub = { res, version: Number(rows[0].version) };
-    if (!subscribers.has(code)) subscribers.set(code, new Set());
-    subscribers.get(code).add(sub);
-    sendEvent(res, 'room', rows[0].data);
-
-    const keepAlive = setInterval(() => res.write(': ping\n\n'), 25000);
-    req.on('close', () => {
-      clearInterval(keepAlive);
-      const set = subscribers.get(code);
-      if (set) {
-        set.delete(sub);
-        if (set.size === 0) subscribers.delete(code);
-      }
-    });
+    await pool.query(
+      `DELETE FROM penalty_rooms WHERE updated_at < now() - ($1 || ' hours')::interval`,
+      [String(ROOM_TTL_HOURS)]
+    );
   } catch (err) {
-    console.error('SSE error:', err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'Gagal membuka stream' });
+    console.error('Cleanup error:', err.message);
   }
-});
+}
 
-app.listen(PORT, () => {
-  console.log(`Adu Penalti Pro berjalan di http://localhost:${PORT}`);
-  if (!pool) console.warn('DATABASE_URL belum diisi: Mode Online nonaktif, Mode Lokal tetap jalan.');
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Adu Penalti Pro berjalan di http://localhost:${PORT}`);
+    if (!pool) console.warn('DATABASE_URL belum diisi: Mode Online nonaktif, Mode Lokal tetap jalan.');
+  });
+}

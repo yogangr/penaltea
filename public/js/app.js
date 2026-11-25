@@ -1139,7 +1139,7 @@
         }
 
         // =========================================================================
-        // 7. ONLINE MULTIPLAYER (Express + Neon Postgres, real-time via SSE)
+        // 7. ONLINE MULTIPLAYER (Express + Neon Postgres, real-time via polling)
         // =========================================================================
         // ---- API client (Express + Neon). Menggantikan Firebase Auth + Firestore ----
         function getOrCreateUserId() {
@@ -1197,24 +1197,39 @@
             return apiRequest('POST', `/api/rooms/${encodeURIComponent(code)}/join`, { name, kit });
         }
 
-        // Real-time lewat Server-Sent Events; mengembalikan fungsi unsubscribe.
+        // Real-time lewat polling singkat (kompatibel dengan Vercel serverless).
+        // Mengembalikan fungsi unsubscribe.
         function watchRoom(code, onData, onError) {
-            const url = `/api/rooms/${encodeURIComponent(code)}/events?uid=${encodeURIComponent(currentUser.uid)}`;
-            const es = new EventSource(url);
-            es.addEventListener('room', (ev) => {
+            let stopped = false;
+            let version = -1;
+            let timer = null;
+            let failures = 0;
+
+            const tick = async () => {
+                if (stopped) return;
                 try {
-                    const data = JSON.parse(ev.data);
-                    onData({ exists: () => true, data: () => data });
-                } catch (e) { console.error('SSE parse error:', e); }
-            });
-            es.addEventListener('closed', () => {
-                onData({ exists: () => false, data: () => null });
-            });
-            es.onerror = () => {
-                // EventSource otomatis reconnect; hanya laporkan jika sudah ditutup permanen.
-                if (es.readyState === EventSource.CLOSED && onError) onError(new Error('SSE closed'));
+                    const res = await fetch(`/api/rooms/${encodeURIComponent(code)}?since=${version}`, { cache: 'no-store' });
+                    if (stopped) return;
+                    if (res.status === 404) {
+                        onData({ exists: () => false, data: () => null });
+                        return;
+                    }
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const json = await res.json();
+                    failures = 0;
+                    if (json.changed) {
+                        version = json.version;
+                        onData({ exists: () => true, data: () => json.data });
+                    }
+                } catch (e) {
+                    failures++;
+                    if (failures === 8 && onError) onError(e);
+                }
+                if (!stopped) timer = setTimeout(tick, document.hidden ? 2500 : 900);
             };
-            return () => es.close();
+
+            tick();
+            return () => { stopped = true; if (timer) clearTimeout(timer); };
         }
 
         async function initOnline() {
@@ -1226,10 +1241,15 @@
 
             try {
                 const res = await fetch('/api/health');
-                const health = res.ok ? await res.json() : null;
+                if (!res.ok) {
+                    statusDot.className = 'w-2.5 h-2.5 rounded-full bg-neutral-600';
+                    statusText.textContent = `Server Online tidak tersedia (API /api/health: HTTP ${res.status}). Mode Lokal siap 100%!`;
+                    return;
+                }
+                const health = await res.json();
                 if (!health || !health.db) {
                     statusDot.className = 'w-2.5 h-2.5 rounded-full bg-neutral-600';
-                    statusText.textContent = 'Server Online tidak tersedia saat ini. Mode Lokal siap 100%!';
+                    statusText.textContent = `Server Online tidak tersedia: ${(health && health.reason) || 'database tidak terhubung'}. Mode Lokal siap 100%!`;
                     return;
                 }
 
@@ -1244,7 +1264,7 @@
             } catch (err) {
                 console.warn('Online init fallback:', err);
                 statusDot.className = 'w-2.5 h-2.5 rounded-full bg-neutral-500';
-                statusText.textContent = 'Mode Online tidak aktif saat ini. Mode Lokal siap dimainkan!';
+                statusText.textContent = `Mode Online tidak aktif (${err.message}). Mode Lokal siap dimainkan!`;
             }
         }
 
